@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>NYC Fleet EV Map (Slim • Public=Blue STRICT)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100vh; width: 100%; }
+    .legend, .controls {
+      background: white; padding: 8px 10px; border-radius: 8px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25); font: 14px/1.2 system-ui, -apple-system, Arial, sans-serif;
+    }
+    .legend .row { display: flex; align-items: center; margin-bottom: 4px; }
+    .swatch { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; border: 1px solid #3333; }
+    .controls label { display: block; margin: 3px 0; }
+    .reload { margin-top: 6px; cursor: pointer; color: #1d4ed8; text-decoration: underline; }
+    .bolt-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #222;
+      color: #fff;
+      font-size: 16px;
+      line-height: 1;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+      transform: translate(-1px, -1px);
+    }
+    .bolt-l2 { background: #dc2626; }
+    .bolt-solar { background: #facc15; color: #111; }
+    .bolt-l3 { background: #111111; }
+    .bolt-public { background: #2563eb; }
+    .leaflet-div-icon { background: transparent; border: none; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map').setView([40.7128, -74.0060], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    var CSV_URL_BASE = 'status_latest_slim.csv';
+    var CSV_URL = CSV_URL_BASE + '?v=' + Date.now();
+
+    function pick(r, keys) {
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (r[k] !== undefined && r[k] !== null && r[k] !== '') return r[k];
+      }
+      return undefined;
+    }
+
+    function normalizeStatus(s) {
+      if (!s) return 'Unknown';
+      var t = ('' + s).toUpperCase();
+      if (t.includes('AVAILABLE')) return 'Available';
+      if (t.includes('INUSE') || t.includes('IN USE')) return 'INUSE';
+      if (t.includes('FAULT') || t.includes('ERROR') || t.includes('PROBLEM')) return 'Faulted';
+      if (t.includes('UNREACHABLE') || t.includes('UNAVAILABLE') || t.includes('DOWN') || t.includes('OFFLINE') || t.includes('UNKNOWN')) return 'Unreachable';
+      return s;
+    }
+
+    function chargerTypeFromRow(r) {
+      var v = pick(r, ['Charger type (legend)', 'Charger type']);
+      if (!v) return 'Level 2';
+      var s = ('' + v).toLowerCase();
+      if (s.includes('level 3')) return 'Level 3';
+      if (s.includes('solar')) return 'Level 2 Solar';
+      return 'Level 2';
+    }
+
+    // STRICT public detection: ONLY check the column "Charger type (legend)" for the phrase "Public Stations".
+    function isPublicStation(r) {
+      var legend = pick(r, ['Charger type (legend)']);
+      if (!legend) return false;
+      var t = ('' + legend).toLowerCase();
+      return t.indexOf('public stations') !== -1;
+    }
+
+    function classForRow(r) {
+      if (isPublicStation(r)) return 'bolt-public';
+      var ctype = chargerTypeFromRow(r);
+      if (ctype === 'Level 3') return 'bolt-l3';
+      if (ctype === 'Level 2 Solar') return 'bolt-solar';
+      return 'bolt-l2';
+    }
+
+    var allRows = [];
+    var markers = [];
+    var layerGroup = L.layerGroup().addTo(map);
+
+    var filterState = {
+      'Available': true,
+      'INUSE': true,
+      'Faulted': true,
+      'Unreachable': true
+    };
+    function passesFilter(statusNorm) {
+      if (statusNorm in filterState) return !!filterState[statusNorm];
+      return true;
+    }
+
+    function makePopup(r, lat, lon) {
+      var name = pick(r, ['stationName']) || r.stationID || 'EV Site';
+      var addr = pick(r, ['Address']) || '';
+      var city = pick(r, ['City']) || '';
+      var state = pick(r, ['State']) || '';
+      var zip = pick(r, ['postalCode']) || '';
+      var fullAddr = [addr, city, state].filter(Boolean).join(', ') + (zip ? (' ' + zip) : '');
+      var status = pick(r, ['LastPortStatus','StationNetworkStatus','status']);
+      var statusNorm = normalizeStatus(status);
+
+      var apple = 'http://maps.apple.com/?daddr=' + lat + ',' + lon;
+      var gmaps = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lon;
+
+      var badge = isPublicStation(r) ? ' <span style="background:#2563eb;color:#fff;padding:1px 6px;border-radius:999px;font-size:11px;">Public</span>' : '';
+
+      var html = '<div style="min-width:240px">'
+               + '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(name) + badge + '</div>'
+               + (fullAddr ? ('<div>' + escapeHtml(fullAddr) + '</div>') : '')
+               + (status ? ('<div><strong>Status:</strong> ' + escapeHtml(status) + '</div>') : '')
+               + '<div style="margin-top:6px">'
+               + '<a href="' + apple + '" target="_blank" rel="noopener">Directions (Apple)</a> &nbsp;|&nbsp; '
+               + '<a href="' + gmaps + '" target="_blank" rel="noopener">Directions (Google)</a>'
+               + '</div>'
+               + '</div>';
+      return html;
+    }
+
+    function boltIconHTML(cls) {
+      return '<div class="bolt-circle ' + cls + '">⚡</div>';
+    }
+
+    function toNum(v) {
+      var n = Number(v);
+      return isFinite(n) ? n : null;
+    }
+
+    function render() {
+      layerGroup.clearLayers();
+      markers = [];
+      var hasAny = false;
+
+      allRows.forEach(function(r){
+        var lat = toNum(pick(r, ['Lat','lat','Latitude']));
+        var lon = toNum(pick(r, ['Long','Longitude','lon','long','Lng','lng']));
+        if (lat == null || lon == null) return;
+
+        var status = pick(r, ['LastPortStatus','StationNetworkStatus','status']);
+        var statusNorm = normalizeStatus(status);
+        if (!passesFilter(statusNorm)) return;
+
+        var cls = classForRow(r);
+        var icon = L.divIcon({
+          className: 'bolt-divicon',
+          iconSize: [26, 26],
+          html: boltIconHTML(cls)
+        });
+
+        var marker = L.marker([lat, lon], { icon: icon })
+          .bindPopup(makePopup(r, lat, lon));
+
+        marker.addTo(layerGroup);
+        markers.push(marker);
+        hasAny = true;
+      });
+
+      if (hasAny) {
+        var group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.15));
+      }
+    }
+
+    function addLegend() {
+      var legend = L.control({position: 'bottomleft'});
+      legend.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<div class="row"><span class="swatch" style="background:#2563eb"></span>Public</div>' +
+                        '<div class="row"><span class="swatch" style="background:#dc2626"></span>Level 2</div>' +
+                        '<div class="row"><span class="swatch" style="background:#facc15"></span>Level 2 Solar</div>' +
+                        '<div class="row"><span class="swatch" style="background:#111111"></span>Level 3</div>' +
+                        '<div class="row" style="margin-top:6px;"><a id="reloadLink" class="reload">Reload data</a></div>';
+        return div;
+      };
+      legend.addTo(map);
+      // Wire reload
+      setTimeout(function(){
+        var link = document.getElementById('reloadLink');
+        if (link) {
+          link.addEventListener('click', function() {
+            CSV_URL = CSV_URL_BASE + '?v=' + Date.now();
+            loadCsvThenRender();
+          });
+        }
+      }, 0);
+    }
+
+    function addControls() {
+      var ctrl = L.control({position: 'topright'});
+      ctrl.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'controls');
+        div.innerHTML = '<b>Filter by Status</b>' +
+                        '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
+                        '<label><input type="checkbox" data-k="INUSE" checked/> INUSE</label>' +
+                        '<label><input type="checkbox" data-k="Faulted" checked/> Faulted</label>' +
+                        '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
+        div.addEventListener('change', function(e){
+          var t = e.target;
+          if (t && t.dataset && t.dataset.k) {
+            filterState[t.dataset.k] = t.checked;
+            render();
+          }
+        });
+        return div;
+      };
+      ctrl.addTo(map);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function(m) {
+        return ({
+          '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+        })[m];
+      });
+    }
+
+    function loadCsvThenRender() {
+      Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        complete: function(res) {
+          allRows = res.data || [];
+          render();
+        },
+        error: function(err){ console.error('CSV parse error:', err); }
+      });
+    }
+
+    // Init
+    addLegend();
+    addControls();
+    loadCsvThenRender();
+  </script>
+</body>
+</html>
