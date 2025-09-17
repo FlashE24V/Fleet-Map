@@ -195,3 +195,15 @@
     Papa.parse(CSV_URL, {
       download: true,
       header: true,
+      dynamicTyping: true,
+      complete: function(res) {
+        allRows = res.data || [];
+        render();
+        addLegend();
+        addControls();
+      },
+      error: function(err){ console.error('CSV parse error:', err); }
+    });
+  </script>
+</body>
+</html>
