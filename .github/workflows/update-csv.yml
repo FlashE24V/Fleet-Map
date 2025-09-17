@@ -1,0 +1,45 @@
+name: Update CSV (ChargePoint)
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"   # every 20 minutes (UTC)
+  workflow_dispatch:         # allow manual run
+
+permissions:
+  contents: write            # allow commits
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      CP_USERNAME: ${{ secrets.CP_USERNAME }}
+      CP_PASSWORD: ${{ secrets.CP_PASSWORD }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Run updater (writes CSVs to repo root)
+        run: |
+          python cp_updater_fleetmap_github_only.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "NYC Fleet Bot"
+          git config user.email "fleet-automation@dcas.nyc.gov"
+          git add status_latest_slim.csv stations_per_station_slim.csv || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Auto-update CSV $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            git push
+          fi
