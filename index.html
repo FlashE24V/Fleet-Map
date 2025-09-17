@@ -31,7 +31,8 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.25);
       transform: translate(-1px, -1px);
     }
-    .bolt-l2 { background: #dc2626; }
+    /* Level 2 ONLY = dark green */
+    .bolt-l2 { background: #065f46; }
     .bolt-solar { background: #facc15; color: #111; }
     .bolt-l3 { background: #111111; }
     .bolt-public { background: #2563eb; }
@@ -88,19 +89,14 @@
       var ctype = chargerTypeFromRow(r);
       if (ctype === 'Level 3') return 'bolt-l3';
       if (ctype === 'Level 2 Solar') return 'bolt-solar';
-      return 'bolt-l2';
+      return 'bolt-l2'; // Level 2 -> dark green
     }
 
     var allRows = [];
     var markers = [];
     var layerGroup = L.layerGroup().addTo(map);
 
-    var filterState = {
-      'Available': true,
-      'INUSE': true,
-      'Faulted': true,
-      'Unreachable': true
-    };
+    var filterState = { 'Available': true, 'INUSE': true, 'Faulted': true, 'Unreachable': true };
     function passesFilter(statusNorm) {
       if (statusNorm in filterState) return !!filterState[statusNorm];
       return true;
@@ -199,15 +195,3 @@
     Papa.parse(CSV_URL, {
       download: true,
       header: true,
-      dynamicTyping: true,
-      complete: function(res) {
-        allRows = res.data || [];
-        render();
-        addLegend();
-        addControls();
-      },
-      error: function(err){ console.error('CSV parse error:', err); }
-    });
-  </script>
-</body>
-</html>
