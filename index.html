@@ -58,11 +58,13 @@
       return undefined;
     }
 
+    // Add "Needs Service" normalization
     function normalizeStatus(s) {
       if (!s) return 'Unknown';
       var t = ('' + s).toUpperCase();
       if (t.includes('AVAILABLE')) return 'Available';
       if (t.includes('INUSE')) return 'INUSE';
+      if (t.includes('NEEDS SERVICE') || t.includes('NEED SERVICE')) return 'Needs Service';
       if (t.includes('FAULT') || t.includes('ERROR') || t.includes('PROBLEM')) return 'Faulted';
       if (t.includes('UNREACHABLE') || t.includes('UNAVAILABLE') || t.includes('DOWN') || t.includes('OFFLINE')) return 'Unreachable';
       return s;
@@ -96,7 +98,14 @@
     var markers = [];
     var layerGroup = L.layerGroup().addTo(map);
 
-    var filterState = { 'Available': true, 'INUSE': true, 'Faulted': true, 'Unreachable': true };
+    // Include "Needs Service" in UI state
+    var filterState = {
+      'Available': true,
+      'INUSE': true,
+      'Needs Service': true,
+      'Faulted': true,
+      'Unreachable': true
+    };
     function passesFilter(statusNorm) {
       if (statusNorm in filterState) return !!filterState[statusNorm];
       return true;
@@ -178,6 +187,7 @@
         div.innerHTML = '<b>Filter by Status</b>' +
                         '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
                         '<label><input type="checkbox" data-k="INUSE" checked/> INUSE</label>' +
+                        '<label><input type="checkbox" data-k="Needs Service" checked/> Needs Service</label>' +
                         '<label><input type="checkbox" data-k="Faulted" checked/> Faulted</label>' +
                         '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
         div.addEventListener('change', function(e){
