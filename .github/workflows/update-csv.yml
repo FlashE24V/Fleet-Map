@@ -2,11 +2,15 @@ name: Update CSV (ChargePoint)
 
 on:
   schedule:
-    - cron: "*/20 * * * *"   # every 20 minutes (UTC)
-  workflow_dispatch:         # allow manual run
+    - cron: "0,20,40 * * * *"   # run at :00, :20, :40 (UTC)
+  workflow_dispatch:             # allow manual run
 
 permissions:
-  contents: write            # allow commits
+  contents: write                # allow commits
+
+concurrency:
+  group: update-csv
+  cancel-in-progress: true       # don't let jobs overlap/queue
 
 jobs:
   update:
