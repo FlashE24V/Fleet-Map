@@ -17,6 +17,7 @@
     .legend .row { display: flex; align-items: center; margin-bottom: 4px; }
     .swatch { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; border: 1px solid #3333; }
     .controls label { display: block; margin: 3px 0; }
+
     .bolt-circle {
       width: 26px;
       height: 26px;
@@ -31,11 +32,13 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.25);
       transform: translate(-1px, -1px);
     }
-    /* Level 2 ONLY = purple */
-    .bolt-l2 { background: #7e22ce; }
-    .bolt-solar { background: #facc15; color: #111; }
-    .bolt-l3 { background: #111111; }
-    .bolt-public { background: #2563eb; }
+
+    /* UPDATED COLORS */
+    .bolt-l3 { background: #16a34a; }     /* Level 3 → green */
+    .bolt-l2 { background: #2563eb; }     /* Level 2 → blue */
+    .bolt-solar { background: #facc15; color: #111; } /* Solar → yellow */
+    .bolt-public { background: #f97316; } /* Public → orange */
+
     .leaflet-div-icon { background: transparent; border: none; }
   </style>
 </head>
@@ -87,11 +90,11 @@
     }
 
     function classForRow(r) {
-      if (isPublicStation(r)) return 'bolt-public';
+      if (isPublicStation(r)) return 'bolt-public';          // Public → orange
       var ctype = chargerTypeFromRow(r);
-      if (ctype === 'Level 3') return 'bolt-l3';
-      if (ctype === 'Level 2 Solar') return 'bolt-solar';
-      return 'bolt-l2'; // Level 2 -> purple
+      if (ctype === 'Level 3') return 'bolt-l3';             // Level 3 → green
+      if (ctype === 'Level 2 Solar') return 'bolt-solar';    // Solar → yellow
+      return 'bolt-l2';                                      // Level 2 → blue
     }
 
     var allRows = [];
@@ -171,10 +174,11 @@
       var legend = L.control({position: 'bottomleft'});
       legend.onAdd = function (map) {
         var div = L.DomUtil.create('div', 'legend');
-        div.innerHTML = '<div class="row"><span class="swatch" style="background:#2563eb"></span>Public</div>' +
-                        '<div class="row"><span class="swatch" style="background:#7e22ce"></span>Level 2</div>' +
+        // Public → orange, Level 2 → blue, Solar → yellow, Level 3 → green
+        div.innerHTML = '<div class="row"><span class="swatch" style="background:#f97316"></span>Public</div>' +
+                        '<div class="row"><span class="swatch" style="background:#2563eb"></span>Level 2</div>' +
                         '<div class="row"><span class="swatch" style="background:#facc15"></span>Level 2 Solar</div>' +
-                        '<div class="row"><span class="swatch" style="background:#111111"></span>Level 3</div>';
+                        '<div class="row"><span class="swatch" style="background:#16a34a"></span>Level 3</div>';
         return div;
       };
       legend.addTo(map);
