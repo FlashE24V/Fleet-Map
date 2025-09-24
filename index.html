@@ -171,7 +171,7 @@
     }
 
     function addLegend() {
-      var legend = L.control({position: 'bottomleft'});
+      var legend = L.control({position: 'topleft'});
       legend.onAdd = function (map) {
         var div = L.DomUtil.create('div', 'legend');
         // Public → orange, Level 2 → blue, Solar → yellow, Level 3 → green
