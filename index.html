@@ -100,7 +100,7 @@
     var markers = [];
     var layerGroup = L.layerGroup().addTo(map);
 
-    // Filters (no Faulted)
+    // Filters (no Faulted, no Model shown)
     var filterState = {
       'Available': true,
       'Charging': true,
@@ -113,12 +113,11 @@
       return true;
     }
 
-    function makePopup(name, model, last, lat, lon, countsHtml) {
+    function makePopup(name, last, lat, lon, countsHtml) {
       var apple = 'http://maps.apple.com/?daddr=' + lat + ',' + lon;
       var gmaps = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lon;
       var popup = '<div style="min-width:220px">'
                 + '<strong>' + name + '</strong>'
-                + (model ? '<br/>Model: ' + model : '')
                 + (last ? '<br/>Status: ' + last : '')
                 + (countsHtml ? '<br/>' + countsHtml : '')
                 + '<br/><div style="margin-top:6px">'
@@ -143,23 +142,29 @@
         if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
 
         var name  = pick(r, ['stationName','name','Location','Site']) || r.stationID || 'EV Site';
-        var model = pick(r, ['stationModel']);
 
-        // Prefer station_label
+        // Prefer station_label (then legacy)
         var rawStatus = pick(r, ['station_label','LastPortStatus','StationNetworkStatus','status']);
         var statusNorm = normalizeStatus(rawStatus);
         if (!passesFilter(statusNorm)) return;
 
         var cls = classForRow(r);
 
-        // Optional counts
+        // Optional counts (compact, one line)
         var countsHtml = '';
         var pTot = pick(r, ['ports_total']);
         var pA   = pick(r, ['ports_available']);
         var pC   = pick(r, ['ports_charging']);
         var pO   = pick(r, ['ports_occupied']);
-        if (pTot !== undefined) {
-          countsHtml = 'Ports — total: ' + pTot + ', avail: ' + (pA ?? 0) + ', charging: ' + (pC ?? 0) + ', occupied: ' + (pO ?? 0);
+
+        if (pTot !== undefined && pTot !== null) {
+          var parts = [];
+          if (pA !== undefined) parts.push(pA + ' Available');
+          if (pC !== undefined) parts.push(pC + ' Charging');
+          if (pO !== undefined) parts.push(pO + ' Occupied');
+          countsHtml = '<div style="margin-top:6px"><b>Ports:</b> ' + pTot + ' total' +
+                       (parts.length ? ' (' + parts.join(' | ') + ')' : '') +
+                       '</div>';
         }
 
         var icon = L.divIcon({
@@ -169,7 +174,7 @@
         });
 
         var marker = L.marker([lat, lon], { icon: icon })
-          .bindPopup(makePopup(name, model, statusNorm, lat, lon, countsHtml));
+          .bindPopup(makePopup(name, statusNorm, lat, lon, countsHtml));
 
         marker.addTo(layerGroup);
         markers.push(marker);
