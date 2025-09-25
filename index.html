@@ -50,7 +50,7 @@
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // PULL CSV FROM GITHUB RAW (cache-busted)
+    // CSV from GitHub Raw (cache-busted)
     var CSV_URL = 'https://raw.githubusercontent.com/FlashE24V/Fleet-Map/main/status_latest_slim.csv?v=' + Date.now();
 
     function pick(r, keys) {
@@ -61,12 +61,13 @@
       return undefined;
     }
 
-    function normalizeStatus(s) {
+    // Normalize to: Available | In Use | Needs Service | Unreachable
+    function normalizeStatusToInUse(s) {
       if (!s) return 'Unknown';
       var t = ('' + s).toUpperCase();
-      if (t.includes('CHARGING')) return 'Charging';
-      if (t.includes('OCCUPIED') || t === 'INUSE') return 'Occupied';
       if (t.includes('AVAILABLE')) return 'Available';
+      if (t.includes('CHARGING')) return 'In Use';
+      if (t.includes('OCCUPIED') || t === 'INUSE') return 'In Use';
       if (t.includes('NEEDS SERVICE') || t.includes('NEED SERVICE')) return 'Needs Service';
       if (t.includes('UNREACHABLE') || t.includes('UNAVAILABLE') || t.includes('DOWN') || t.includes('OFFLINE')) return 'Unreachable';
       return s;
@@ -100,11 +101,10 @@
     var markers = [];
     var layerGroup = L.layerGroup().addTo(map);
 
-    // Filters (no Faulted, no Model shown)
+    // Filters (merged charging+occupied → "In Use"; no "Faulted", no "Model")
     var filterState = {
       'Available': true,
-      'Charging': true,
-      'Occupied': true,
+      'In Use': true,
       'Needs Service': true,
       'Unreachable': true
     };
@@ -113,12 +113,12 @@
       return true;
     }
 
-    function makePopup(name, last, lat, lon, countsHtml) {
+    function makePopup(name, statusText, lat, lon, countsHtml) {
       var apple = 'http://maps.apple.com/?daddr=' + lat + ',' + lon;
       var gmaps = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lon;
       var popup = '<div style="min-width:220px">'
                 + '<strong>' + name + '</strong>'
-                + (last ? '<br/>Status: ' + last : '')
+                + (statusText ? '<br/>Status: ' + statusText : '')
                 + (countsHtml ? '<br/>' + countsHtml : '')
                 + '<br/><div style="margin-top:6px">'
                 + '<a href="' + apple + '" target="_blank" rel="noopener">Directions (Apple)</a> &nbsp;|&nbsp; '
@@ -143,28 +143,29 @@
 
         var name  = pick(r, ['stationName','name','Location','Site']) || r.stationID || 'EV Site';
 
-        // Prefer station_label (then legacy)
+        // Prefer station_label then legacy fields
         var rawStatus = pick(r, ['station_label','LastPortStatus','StationNetworkStatus','status']);
-        var statusNorm = normalizeStatus(rawStatus);
+        var statusNorm = normalizeStatusToInUse(rawStatus);
         if (!passesFilter(statusNorm)) return;
 
         var cls = classForRow(r);
 
-        // Optional counts (compact, one line)
+        // Compact counts (one line) — In Use = charging + occupied
         var countsHtml = '';
         var pTot = pick(r, ['ports_total']);
         var pA   = pick(r, ['ports_available']);
-        var pC   = pick(r, ['ports_charging']);
-        var pO   = pick(r, ['ports_occupied']);
+        var pC   = pick(r, ['ports_charging']) || 0;
+        var pO   = pick(r, ['ports_occupied']) || 0;
+        var inUse = (typeof pC === 'number' ? pC : parseInt(pC || 0, 10)) +
+                    (typeof pO === 'number' ? pO : parseInt(pO || 0, 10));
 
         if (pTot !== undefined && pTot !== null) {
           var parts = [];
           if (pA !== undefined) parts.push(pA + ' Available');
-          if (pC !== undefined) parts.push(pC + ' Charging');
-          if (pO !== undefined) parts.push(pO + ' Occupied');
-          countsHtml = '<div style="margin-top:6px"><b>Ports:</b> ' + pTot + ' total' +
-                       (parts.length ? ' (' + parts.join(' | ') + ')' : '') +
-                       '</div>';
+          parts.push(inUse + ' In Use'); // show merged number
+          countsHtml = '<div style="margin-top:6px"><b>Ports:</b> ' + pTot + ' total'
+                     + (parts.length ? ' (' + parts.join(' | ') + ')' : '')
+                     + '</div>';
         }
 
         var icon = L.divIcon({
@@ -198,42 +199,3 @@
         return div;
       };
       legend.addTo(map);
-    }
-
-    function addControls() {
-      var ctrl = L.control({position: 'topright'});
-      ctrl.onAdd = function (map) {
-        var div = L.DomUtil.create('div', 'controls');
-        div.innerHTML = '<b>Filter by Status</b>' +
-                        '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
-                        '<label><input type="checkbox" data-k="Charging" checked/> Charging</label>' +
-                        '<label><input type="checkbox" data-k="Occupied" checked/> Occupied</label>' +
-                        '<label><input type="checkbox" data-k="Needs Service" checked/> Needs Service</label>' +
-                        '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
-        div.addEventListener('change', function(e){
-          var t = e.target;
-          if (t && t.dataset && t.dataset.k) {
-            filterState[t.dataset.k] = t.checked;
-            render();
-          }
-        });
-        return div;
-      };
-      ctrl.addTo(map);
-    }
-
-    Papa.parse(CSV_URL, {
-      download: true,
-      header: true,
-      dynamicTyping: true,
-      complete: function(res) {
-        allRows = res.data || [];
-        render();
-        addLegend();
-        addControls();
-      },
-      error: function(err){ console.error('CSV parse error:', err); }
-    });
-  </script>
-</body>
-</html>
