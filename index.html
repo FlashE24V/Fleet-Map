@@ -98,4 +98,163 @@
     }
 
     function chargerTypeFromRow(r) {
-      var v = pick(r, ['Charger type (legend)', 'Charg]()
+      var v = pick(r, ['Charger type (legend)', 'Charger type']);
+      if (!v) return 'Level 2';
+      var s = ('' + v).toLowerCase();
+      if (s.includes('level 3')) return 'Level 3';
+      if (s.includes('solar')) return 'Level 2 Solar';
+      return 'Level 2';
+    }
+
+    function isPublicStation(r) {
+      var legend = pick(r, ['Charger type (legend)']);
+      if (!legend) return false;
+      var t = ('' + legend).toLowerCase();
+      return t.indexOf('public stations') !== -1;
+    }
+
+    function classForRow(r) {
+      if (isPublicStation(r)) return 'bolt-public';
+      var ctype = chargerTypeFromRow(r);
+      if (ctype === 'Level 3') return 'bolt-l3';
+      if (ctype === 'Level 2 Solar') return 'bolt-solar';
+      return 'bolt-l2';
+    }
+
+    var allRows = [];
+    var markers = [];
+    var layerGroup = L.layerGroup().addTo(map);
+
+    // Filters (Charging+Occupied merged → "In Use")
+    var filterState = {
+      'Available': true,
+      'In Use': true,
+      'Unreachable': true
+    };
+    function passesFilter(statusNorm) {
+      if (statusNorm in filterState) return !!filterState[statusNorm];
+      return true;
+    }
+
+    function makePopup(name, statusText, lat, lon, countsHtml) {
+      var apple = 'http://maps.apple.com/?daddr=' + lat + ',' + lon;
+      var gmaps = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lon;
+      var popup = '<div style="min-width:220px">'
+                + '<strong>' + name + '</strong>'
+                + (statusText ? '<br/>Status: ' + statusText : '')
+                + (countsHtml ? '<br/>' + countsHtml : '')
+                + '<br/><div style="margin-top:6px">'
+                + '<a href="' + apple + '" target="_blank" rel="noopener">Directions (Apple)</a> &nbsp;|&nbsp; '
+                + '<a href="' + gmaps + '" target="_blank" rel="noopener">Directions (Google)</a>'
+                + '</div></div>';
+      return popup;
+    }
+
+    function boltIconHTML(cls) {
+      return '<div class="bolt-circle ' + cls + '">⚡</div>';
+    }
+
+    function render() {
+      layerGroup.clearLayers();
+      markers = [];
+      var hasAny = false;
+
+      allRows.forEach(function(r){
+        var lat = pick(r, ['Lat','lat','Latitude']);
+        var lon = pick(r, ['Long','Longitude','lon','long','Lng','lng']);
+        if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
+
+        var name  = pick(r, ['stationName','name','Location','Site']) || r.stationID || 'EV Site';
+
+        // Final status (network override for Unreachable)
+        var statusNorm = deriveStatus(r);
+        if (!passesFilter(statusNorm)) return;
+
+        var cls = classForRow(r);
+
+        // One-line counts (In Use = charging + occupied)
+        var countsHtml = '';
+        var pTot = pick(r, ['ports_total']);
+        var pA   = pick(r, ['ports_available']);
+        var pC   = pick(r, ['ports_charging']) || 0;
+        var pO   = pick(r, ['ports_occupied']) || 0;
+        var inUse = (typeof pC === 'number' ? pC : parseInt(pC || 0, 10)) +
+                    (typeof pO === 'number' ? pO : parseInt(pO || 0, 10));
+
+        if (pTot !== undefined && pTot !== null) {
+          var parts = [];
+          if (pA !== undefined) parts.push(pA + ' Available');
+          parts.push(inUse + ' In Use');
+          countsHtml = '<div style="margin-top:6px"><b>Ports:</b> ' + pTot + ' total'
+                     + (parts.length ? ' (' + parts.join(' | ') + ')' : '')
+                     + '</div>';
+        }
+
+        var icon = L.divIcon({
+          className: 'bolt-divicon',
+          iconSize: [26, 26],
+          html: boltIconHTML(cls)
+        });
+
+        var marker = L.marker([lat, lon], { icon: icon })
+          .bindPopup(makePopup(name, statusNorm, lat, lon, countsHtml));
+
+        marker.addTo(layerGroup);
+        markers.push(marker);
+        hasAny = true;
+      });
+
+      if (hasAny) {
+        var group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.15));
+      }
+    }
+
+    function addLegend() {
+      var legend = L.control({position: 'topleft'});
+      legend.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<div class="row"><span class="swatch" style="background:#f97316"></span>Public</div>' +
+                        '<div class="row"><span class="swatch" style="background:#2563eb"></span>Level 2</div>' +
+                        '<div class="row"><span class="swatch" style="background:#facc15"></span>Level 2 Solar</div>' +
+                        '<div class="row"><span class="swatch" style="background:#16a34a"></span>Level 3</div>';
+        return div;
+      };
+      legend.addTo(map);
+    }
+
+    function addControls() {
+      var ctrl = L.control({position: 'topright'});
+      ctrl.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'controls');
+        div.innerHTML = '<b>Filter by Status</b>' +
+                        '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
+                        '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
+                        '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
+        div.addEventListener('change', function(e){
+          var t = e.target;
+          if (t && t.dataset && t.dataset.k) {
+            filterState[t.dataset.k] = t.checked;
+            render();
+          }
+        });
+        return div;
+      };
+      ctrl.addTo(map);
+    }
+
+    Papa.parse(CSV_URL, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: function(res) {
+        allRows = res.data || [];
+        render();
+        addLegend();
+        addControls();
+      },
+      error: function(err){ console.error('CSV parse error:', err); }
+    });
+  </script>
+</body>
+</html>
