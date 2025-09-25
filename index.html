@@ -199,3 +199,41 @@
         return div;
       };
       legend.addTo(map);
+    }
+
+    function addControls() {
+      var ctrl = L.control({position: 'topright'});
+      ctrl.onAdd = function (map) {
+        var div = L.DomUtil.create('div', 'controls');
+        div.innerHTML = '<b>Filter by Status</b>' +
+                        '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
+                        '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
+                        '<label><input type="checkbox" data-k="Needs Service" checked/> Needs Service</label>' +
+                        '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
+        div.addEventListener('change', function(e){
+          var t = e.target;
+          if (t && t.dataset && t.dataset.k) {
+            filterState[t.dataset.k] = t.checked;
+            render();
+          }
+        });
+        return div;
+      };
+      ctrl.addTo(map);
+    }
+
+    Papa.parse(CSV_URL, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: function(res) {
+        allRows = res.data || [];
+        render();
+        addLegend();
+        addControls();
+      },
+      error: function(err){ console.error('CSV parse error:', err); }
+    });
+  </script>
+</body>
+</html>
