@@ -62,15 +62,39 @@
     }
 
     // Normalize to: Available | In Use | Needs Service | Unreachable
-    function normalizeStatusToInUse(s) {
-      if (!s) return 'Unknown';
-      var t = ('' + s).toUpperCase();
+    function normalizeToInUse(text) {
+      if (!text) return 'Unknown';
+      var t = ('' + text).toUpperCase();
       if (t.includes('AVAILABLE')) return 'Available';
       if (t.includes('CHARGING')) return 'In Use';
       if (t.includes('OCCUPIED') || t === 'INUSE') return 'In Use';
       if (t.includes('NEEDS SERVICE') || t.includes('NEED SERVICE')) return 'Needs Service';
       if (t.includes('UNREACHABLE') || t.includes('UNAVAILABLE') || t.includes('DOWN') || t.includes('OFFLINE')) return 'Unreachable';
-      return s;
+      return text;
+    }
+
+    // Derive final status for a row, prioritizing network status = Unreachable
+    function deriveStatus(r) {
+      var stationLabel = pick(r, ['station_label']);
+      var lastPort     = pick(r, ['LastPortStatus','status']); // fallback
+      var net          = pick(r, ['StationNetworkStatus','networkStatus','NetworkStatus']);
+      var fault        = pick(r, ['faultReason']);
+
+      if (net) {
+        var n = ('' + net).toUpperCase();
+        if (n.includes('UNREACHABLE') || n.includes('UNAVAILABLE') || n.includes('OFFLINE') || n.includes('DOWN')) {
+          return 'Unreachable';
+        }
+      }
+
+      var base = stationLabel != null && stationLabel !== '' ? stationLabel : lastPort;
+
+      if (fault) {
+        var f = ('' + fault).toUpperCase();
+        if (f.includes('NEEDS SERVICE') || f.includes('NEED SERVICE')) return 'Needs Service';
+      }
+
+      return normalizeToInUse(base);
     }
 
     function chargerTypeFromRow(r) {
@@ -101,7 +125,7 @@
     var markers = [];
     var layerGroup = L.layerGroup().addTo(map);
 
-    // Filters (merged charging+occupied → "In Use"; no "Faulted", no "Model")
+    // Filters (Charging+Occupied merged → "In Use")
     var filterState = {
       'Available': true,
       'In Use': true,
@@ -143,14 +167,13 @@
 
         var name  = pick(r, ['stationName','name','Location','Site']) || r.stationID || 'EV Site';
 
-        // Prefer station_label then legacy fields
-        var rawStatus = pick(r, ['station_label','LastPortStatus','StationNetworkStatus','status']);
-        var statusNorm = normalizeStatusToInUse(rawStatus);
+        // Final status (network override for Unreachable)
+        var statusNorm = deriveStatus(r);
         if (!passesFilter(statusNorm)) return;
 
         var cls = classForRow(r);
 
-        // Compact counts (one line) — In Use = charging + occupied
+        // One-line counts (In Use = charging + occupied)
         var countsHtml = '';
         var pTot = pick(r, ['ports_total']);
         var pA   = pick(r, ['ports_available']);
@@ -162,7 +185,7 @@
         if (pTot !== undefined && pTot !== null) {
           var parts = [];
           if (pA !== undefined) parts.push(pA + ' Available');
-          parts.push(inUse + ' In Use'); // show merged number
+          parts.push(inUse + ' In Use');
           countsHtml = '<div style="margin-top:6px"><b>Ports:</b> ' + pTot + ' total'
                      + (parts.length ? ' (' + parts.join(' | ') + ')' : '')
                      + '</div>';
