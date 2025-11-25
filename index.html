@@ -136,8 +136,8 @@
     }
 
     function rowHasCoords(r) {
-      var lat = pick(r, ['Lat','lat','Latitude']);
-      var lon = pick(r, ['Long','Longitude','lon','long','Lng','lng']);
+      var lat = pick(r, ['Lat','lat','Latitude','latitude']);
+      var lon = pick(r, ['Long','Longitude','lon','long','Lng','lng','longitude']);
       return (typeof lat === 'number' && typeof lon === 'number' && !isNaN(lat) && !isNaN(lon));
     }
 
@@ -194,8 +194,8 @@
       var hasAny = false;
 
       allRows.forEach(function(r){
-        var lat = pick(r, ['Lat','lat','Latitude']);
-        var lon = pick(r, ['Long','Longitude','lon','long','Lng','lng']);
+        var lat = pick(r, ['Lat','lat','Latitude','latitude']);
+        var lon = pick(r, ['Long','Longitude','lon','long','Lng','lng','longitude']);
         if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
 
         var name  = pick(r, ['stationName','name','Location','Site']) || r.stationID || 'EV Site';
@@ -347,5 +347,4 @@
       });
     });
   </script>
-</body>
-</html>
+</bo
