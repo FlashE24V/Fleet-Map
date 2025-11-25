@@ -170,13 +170,15 @@
       return true;
     }
 
-    function makePopup(name, statusText, lat, lon, countsHtml) {
+    function makePopup(name, statusText, lat, lon, countsHtml, descText) {
       var apple = 'http://maps.apple.com/?daddr=' + lat + ',' + lon;
       var gmaps = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lon;
+
       var popup = '<div style="min-width:220px">'
                 + '<strong>' + name + '</strong>'
                 + (statusText ? '<br/>Status: ' + statusText : '')
                 + (countsHtml ? '<br/>' + countsHtml : '')
+                + (descText ? '<br/><b>Rate:</b> ' + descText : '')
                 + '<br/><div style="margin-top:6px">'
                 + '<a href="' + apple + '" target="_blank" rel="noopener">Directions (Apple)</a> &nbsp;|&nbsp; '
                 + '<a href="' + gmaps + '" target="_blank" rel="noopener">Directions (Google)</a>'
@@ -198,7 +200,17 @@
         var lon = pick(r, ['Long','Longitude','lon','long','Lng','lng','longitude']);
         if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
 
-        var name  = pick(r, ['stationName','name','Location','Site']) || r.stationID || 'EV Site';
+        // Use best available location/name field
+        var name  = pick(r, [
+          'stationName',
+          'name',
+          'Location',
+          'Site',
+          'DOT LOT AND NISSAN CHARGERS'
+        ]) || r.stationID || 'EV Site';
+
+        // Optional description / rate text
+        var descText = pick(r, ['description', 'Description', 'rate', 'Rate']);
 
         // Final status (network override for Unreachable)
         var statusNorm = deriveStatus(r);
@@ -231,7 +243,7 @@
         });
 
         var marker = L.marker([lat, lon], { icon: icon })
-          .bindPopup(makePopup(name, statusNorm, lat, lon, countsHtml));
+          .bindPopup(makePopup(name, statusNorm, lat, lon, countsHtml, descText));
 
         marker.addTo(layerGroup);
         markers.push(marker);
@@ -252,14 +264,12 @@
       legendControl.onAdd = function () {
         legendEl = L.DomUtil.create('div', 'legend');
         legendEl.innerHTML =
-          // New custom legend entries for DOT layers
-          '<div class="row"><span class="swatch" style="background:#a855f7"></span><span class="label">DOT Flo L2</span><span class="count" id="count-flo">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#6b7280"></span><span class="label">DOT LOT</span><span class="count" id="count-dotlot">(0)</span></div>' +
-          // Existing categories
           '<div class="row"><span class="swatch" style="background:#f97316"></span><span class="label">Public</span><span class="count" id="count-public">(0)</span></div>' +
           '<div class="row"><span class="swatch" style="background:#2563eb"></span><span class="label">Level 2</span><span class="count" id="count-l2">(0)</span></div>' +
           '<div class="row"><span class="swatch" style="background:#facc15"></span><span class="label">Level 2 Solar</span><span class="count" id="count-solar">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#16a34a"></span><span class="label">Level 3</span><span class="count" id="count-l3">(0)</span></div>';
+          '<div class="row"><span class="swatch" style="background:#16a34a"></span><span class="label">Level 3</span><span class="count" id="count-l3">(0)</span></div>' +
+          '<div class="row"><span class="swatch" style="background:#a855f7"></span><span class="label">DOT Flo L2</span><span class="count" id="count-flo">(0)</span></div>' +
+          '<div class="row"><span class="swatch" style="background:#6b7280"></span><span class="label">DOT LOT</span><span class="count" id="count-dotlot">(0)</span></div>';
         return legendEl;
       };
       legendControl.addTo(map);
@@ -285,12 +295,12 @@
       var byId = function(id){ return legendEl.querySelector('#' + id); };
       var el;
 
-      el = byId('count-flo');    if (el) el.textContent    = '(' + (counts['DOT Flo L2'] || 0) + ')';
-      el = byId('count-dotlot'); if (el) el.textContent    = '(' + (counts['DOT LOT'] || 0) + ')';
-      el = byId('count-public'); if (el) el.textContent    = '(' + (counts['Public'] || 0) + ')';
-      el = byId('count-l2');     if (el) el.textContent    = '(' + (counts['Level 2'] || 0) + ')';
-      el = byId('count-solar');  if (el) el.textContent    = '(' + (counts['Level 2 Solar'] || 0) + ')';
-      el = byId('count-l3');     if (el) el.textContent    = '(' + (counts['Level 3'] || 0) + ')';
+      el = byId('count-public'); if (el) el.textContent = '(' + (counts['Public'] || 0) + ')';
+      el = byId('count-l2');     if (el) el.textContent = '(' + (counts['Level 2'] || 0) + ')';
+      el = byId('count-solar');  if (el) el.textContent = '(' + (counts['Level 2 Solar'] || 0) + ')';
+      el = byId('count-l3');     if (el) el.textContent = '(' + (counts['Level 3'] || 0) + ')';
+      el = byId('count-flo');    if (el) el.textContent = '(' + (counts['DOT Flo L2'] || 0) + ')';
+      el = byId('count-dotlot'); if (el) el.textContent = '(' + (counts['DOT LOT'] || 0) + ')';
     }
 
     function addControls() {
@@ -347,4 +357,5 @@
       });
     });
   </script>
-</bo
+</body>
+</html>
