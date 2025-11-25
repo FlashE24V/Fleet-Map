@@ -332,4 +332,19 @@
           if (res && res.data) {
             res.data.forEach((r) => {
               r.__source = cfg.source;
-              allRow
+              allRows.push(r);
+            });
+          }
+          pending--;
+          if (pending === 0) {
+            addLegend();
+            updateLegendCounts();
+            render();
+            addControls();
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
