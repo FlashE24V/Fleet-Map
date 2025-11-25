@@ -36,11 +36,14 @@
       transform: translate(-1px, -1px);
     }
 
-    /* COLORS BY CHARGER TYPE */
-    .bolt-l3 { background: #16a34a; }     /* Level 3 → green */
-    .bolt-l2 { background: #2563eb; }     /* Level 2 → blue */
-    .bolt-solar { background: #facc15; color: #111; } /* Solar → yellow */
-    .bolt-public { background: #f97316; } /* Public → orange */
+    /* COLORS BY CHARGER TYPE / SOURCE */
+    .bolt-l3 { background: #16a34a; }       /* Level 3 → green */
+    .bolt-l2 { background: #2563eb; }       /* Level 2 → blue */
+    .bolt-solar { background: #facc15; color: #111; }  /* Solar → yellow */
+    .bolt-public { background: #f97316; }   /* Public → orange */
+
+    .bolt-flo { background: #a855f7; }      /* DOT Flo L2 → purple */
+    .bolt-dotlot { background: #6b7280; }   /* DOT LOT & Nissan → grey */
 
     .leaflet-div-icon { background: transparent; border: none; }
   </style>
@@ -53,8 +56,12 @@
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // CSV from GitHub Raw (cache-busted)
-    var CSV_URL = 'https://raw.githubusercontent.com/FlashE24V/Fleet-Map/main/status_latest_slim.csv?v=' + Date.now();
+    // CSVs from repo root (status = live, others = static)
+    var CSV_URLS = [
+      { url: 'status_latest_slim.csv?v=' + Date.now(),       source: 'live' },    // auto-updated by workflow
+      { url: 'DOT Flo L2 Curbside Chargers.csv',             source: 'flo' },     // static, purple
+      { url: 'DOT LOT AND NISSAN CHARGERS (1).csv',          source: 'dot_lot' }  // static, grey
+    ];
 
     function pick(r, keys) {
       for (var i = 0; i < keys.length; i++) {
@@ -117,6 +124,10 @@
     }
 
     function classForRow(r) {
+      // Override marker color by source filename
+      if (r.__source === 'flo') return 'bolt-flo';
+      if (r.__source === 'dot_lot') return 'bolt-dotlot';
+
       if (isPublicStation(r)) return 'bolt-public';
       var ctype = chargerTypeFromRow(r);
       if (ctype === 'Level 3') return 'bolt-l3';
@@ -132,6 +143,11 @@
 
     function classifyRowForLegend(r) {
       if (!rowHasCoords(r)) return null;
+
+      // Legend bucket based on source first
+      if (r.__source === 'flo') return 'DOT Flo L2';
+      if (r.__source === 'dot_lot') return 'DOT LOT';
+
       if (isPublicStation(r)) return 'Public';
       var ctype = chargerTypeFromRow(r);
       if (ctype === 'Level 3') return 'Level 3';
@@ -236,6 +252,10 @@
       legendControl.onAdd = function () {
         legendEl = L.DomUtil.create('div', 'legend');
         legendEl.innerHTML =
+          // New custom legend entries for DOT layers
+          '<div class="row"><span class="swatch" style="background:#a855f7"></span><span class="label">DOT Flo L2</span><span class="count" id="count-flo">(0)</span></div>' +
+          '<div class="row"><span class="swatch" style="background:#6b7280"></span><span class="label">DOT LOT</span><span class="count" id="count-dotlot">(0)</span></div>' +
+          // Existing categories
           '<div class="row"><span class="swatch" style="background:#f97316"></span><span class="label">Public</span><span class="count" id="count-public">(0)</span></div>' +
           '<div class="row"><span class="swatch" style="background:#2563eb"></span><span class="label">Level 2</span><span class="count" id="count-l2">(0)</span></div>' +
           '<div class="row"><span class="swatch" style="background:#facc15"></span><span class="label">Level 2 Solar</span><span class="count" id="count-solar">(0)</span></div>' +
@@ -248,7 +268,14 @@
     function updateLegendCounts() {
       if (!legendEl || !allRows) return;
 
-      var counts = { Public: 0, 'Level 2': 0, 'Level 2 Solar': 0, 'Level 3': 0 };
+      var counts = {
+        'DOT Flo L2': 0,
+        'DOT LOT': 0,
+        Public: 0,
+        'Level 2': 0,
+        'Level 2 Solar': 0,
+        'Level 3': 0
+      };
 
       allRows.forEach(function(r){
         var bucket = classifyRowForLegend(r);
@@ -258,10 +285,12 @@
       var byId = function(id){ return legendEl.querySelector('#' + id); };
       var el;
 
-      el = byId('count-public'); if (el) el.textContent = '(' + (counts['Public'] || 0) + ')';
-      el = byId('count-l2');     if (el) el.textContent = '(' + (counts['Level 2'] || 0) + ')';
-      el = byId('count-solar');  if (el) el.textContent = '(' + (counts['Level 2 Solar'] || 0) + ')';
-      el = byId('count-l3');     if (el) el.textContent = '(' + (counts['Level 3'] || 0) + ')';
+      el = byId('count-flo');    if (el) el.textContent    = '(' + (counts['DOT Flo L2'] || 0) + ')';
+      el = byId('count-dotlot'); if (el) el.textContent    = '(' + (counts['DOT LOT'] || 0) + ')';
+      el = byId('count-public'); if (el) el.textContent    = '(' + (counts['Public'] || 0) + ')';
+      el = byId('count-l2');     if (el) el.textContent    = '(' + (counts['Level 2'] || 0) + ')';
+      el = byId('count-solar');  if (el) el.textContent    = '(' + (counts['Level 2 Solar'] || 0) + ')';
+      el = byId('count-l3');     if (el) el.textContent    = '(' + (counts['Level 3'] || 0) + ')';
     }
 
     function addControls() {
@@ -284,18 +313,38 @@
       ctrl.addTo(map);
     }
 
-    Papa.parse(CSV_URL, {
-      download: true,
-      header: true,
-      dynamicTyping: true,
-      complete: function(res) {
-        allRows = res.data || [];
-        addLegend();           // build legend skeleton
-        updateLegendCounts();  // fill totals (greyed out, in parentheses)
-        render();              // plot markers
-        addControls();
-      },
-      error: function(err){ console.error('CSV parse error:', err); }
+    // Load and merge all CSVs, tagging each row with its source
+    var pendingLoads = CSV_URLS.length;
+    allRows = [];
+
+    CSV_URLS.forEach(function(cfg) {
+      var url = cfg.url;
+      var source = cfg.source;
+
+      Papa.parse(url, {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        complete: function(res) {
+          if (res && res.data) {
+            res.data.forEach(function(row) {
+              row.__source = source;
+              allRows.push(row);
+            });
+          }
+          pendingLoads--;
+          if (pendingLoads === 0) {
+            addLegend();          // build legend skeleton
+            updateLegendCounts(); // fill totals
+            render();             // plot markers
+            addControls();
+          }
+        },
+        error: function(err){
+          console.error('CSV parse error for', url, err);
+          pendingLoads--;
+        }
+      });
     });
   </script>
 </body>
