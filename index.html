@@ -10,16 +10,29 @@
   <style>
     html, body { height: 100%; margin: 0; }
     #map { height: 100vh; width: 100%; }
-    .legend, .controls {
-      background: white; padding: 8px 10px; border-radius: 8px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.25); font: 14px/1.2 system-ui, -apple-system, Arial, sans-serif;
+    .legend {
+      background: white;
+      padding: 8px 10px;
+      border-radius: 8px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      font: 14px/1.2 system-ui, -apple-system, Arial, sans-serif;
     }
-    .legend .row { display: flex; align-items: center; margin-bottom: 4px; gap: 6px; }
-    .swatch { width: 12px; height: 12px; border-radius: 50%; margin-right: 2px; border: 1px solid #3333; }
+    .legend .row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 4px;
+      gap: 6px;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 2px;
+      border: 1px solid #3333;
+    }
     .legend .label { flex: 1; }
     .legend .count { color: #6b7280; } /* greyed-out totals in parentheses */
-
-    .controls label { display: block; margin: 3px 0; }
+    .legend label { display: block; margin: 3px 0; }
 
     .bolt-circle {
       width: 26px;
@@ -279,18 +292,77 @@
 
     var legendControl, legendEl;
 
-    function addLegend() {
+    function addLegendWithFilters() {
       if (legendControl) return; // avoid duplicates
-      legendControl = L.control({position: 'topleft'});
+      legendControl = L.control({position: 'topright'});
       legendControl.onAdd = function () {
         legendEl = L.DomUtil.create('div', 'legend');
         legendEl.innerHTML =
-          '<div class="row"><span class="swatch" style="background:#f97316"></span><span class="label">Public</span><span class="count" id="count-public">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#2563eb"></span><span class="label">Level 2</span><span class="count" id="count-l2">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#facc15"></span><span class="label">Level 2 Solar</span><span class="count" id="count-solar">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#16a34a"></span><span class="label">Level 3</span><span class="count" id="count-l3">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#a855f7"></span><span class="label">DOT Flo L2</span><span class="count" id="count-flo">(0)</span></div>' +
-          '<div class="row"><span class="swatch" style="background:#6b7280"></span><span class="label">DOT LOT</span><span class="count" id="count-dotlot">(0)</span></div>';
+          '<div style="margin-bottom:4px;"><b>Filter by Status</b></div>' +
+          '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
+          '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
+          '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>' +
+          '<hr style="margin:6px 0;" />' +
+          '<div style="margin-bottom:4px;"><b>Filter by Type</b></div>' +
+
+          '<div class="row">' +
+            '<input type="checkbox" data-type="Public" checked style="margin-right:4px;"/>' +
+            '<span class="swatch" style="background:#f97316"></span>' +
+            '<span class="label">Public</span>' +
+            '<span class="count" id="count-public">(0)</span>' +
+          '</div>' +
+
+          '<div class="row">' +
+            '<input type="checkbox" data-type="Level 2" checked style="margin-right:4px;"/>' +
+            '<span class="swatch" style="background:#2563eb"></span>' +
+            '<span class="label">Level 2</span>' +
+            '<span class="count" id="count-l2">(0)</span>' +
+          '</div>' +
+
+          '<div class="row">' +
+            '<input type="checkbox" data-type="Level 2 Solar" checked style="margin-right:4px;"/>' +
+            '<span class="swatch" style="background:#facc15"></span>' +
+            '<span class="label">Level 2 Solar</span>' +
+            '<span class="count" id="count-solar">(0)</span>' +
+          '</div>' +
+
+          '<div class="row">' +
+            '<input type="checkbox" data-type="Level 3" checked style="margin-right:4px;"/>' +
+            '<span class="swatch" style="background:#16a34a"></span>' +
+            '<span class="label">Level 3</span>' +
+            '<span class="count" id="count-l3">(0)</span>' +
+          '</div>' +
+
+          '<div class="row">' +
+            '<input type="checkbox" data-type="DOT Flo L2" checked style="margin-right:4px;"/>' +
+            '<span class="swatch" style="background:#a855f7"></span>' +
+            '<span class="label">DOT Flo L2</span>' +
+            '<span class="count" id="count-flo">(0)</span>' +
+          '</div>' +
+
+          '<div class="row">' +
+            '<input type="checkbox" data-type="DOT LOT" checked style="margin-right:4px;"/>' +
+            '<span class="swatch" style="background:#6b7280"></span>' +
+            '<span class="label">DOT LOT</span>' +
+            '<span class="count" id="count-dotlot">(0)</span>' +
+          '</div>';
+
+        // Handle checkbox changes (status + type) in one place
+        legendEl.addEventListener('change', function(e){
+          var t = e.target;
+          if (!t || !t.dataset) return;
+
+          if (t.dataset.k) {
+            // Status filter
+            filterState[t.dataset.k] = t.checked;
+            render();
+          } else if (t.dataset.type) {
+            // Type filter
+            typeFilterState[t.dataset.type] = t.checked;
+            render();
+          }
+        });
+
         return legendEl;
       };
       legendControl.addTo(map);
@@ -324,43 +396,6 @@
       el = byId('count-dotlot'); if (el) el.textContent = '(' + (counts['DOT LOT'] || 0) + ')';
     }
 
-    function addControls() {
-      var ctrl = L.control({position: 'topright'});
-      ctrl.onAdd = function () {
-        var div = L.DomUtil.create('div', 'controls');
-        div.innerHTML =
-          '<b>Filter by Status</b>' +
-          '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
-          '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
-          '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>' +
-          '<hr style="margin:6px 0;" />' +
-          '<b>Filter by Type</b>' +
-          '<label><input type="checkbox" data-type="Public" checked/> Public</label>' +
-          '<label><input type="checkbox" data-type="Level 2" checked/> Level 2</label>' +
-          '<label><input type="checkbox" data-type="Level 2 Solar" checked/> Level 2 Solar</label>' +
-          '<label><input type="checkbox" data-type="Level 3" checked/> Level 3</label>' +
-          '<label><input type="checkbox" data-type="DOT Flo L2" checked/> DOT Flo L2</label>' +
-          '<label><input type="checkbox" data-type="DOT LOT" checked/> DOT LOT</label>';
-
-        div.addEventListener('change', function(e){
-          var t = e.target;
-          if (!t || !t.dataset) return;
-
-          if (t.dataset.k) {
-            // Status filter (Available / In Use / Unreachable)
-            filterState[t.dataset.k] = t.checked;
-            render();
-          } else if (t.dataset.type) {
-            // Type filter (Public / Level 2 / etc.)
-            typeFilterState[t.dataset.type] = t.checked;
-            render();
-          }
-        });
-        return div;
-      };
-      ctrl.addTo(map);
-    }
-
     // Load and merge all CSVs, tagging each row with its source
     var pendingLoads = CSV_URLS.length;
     allRows = [];
@@ -382,10 +417,9 @@
           }
           pendingLoads--;
           if (pendingLoads === 0) {
-            addLegend();          // build legend skeleton
-            updateLegendCounts(); // fill totals
-            render();             // plot markers
-            addControls();
+            addLegendWithFilters(); // build legend + filters
+            updateLegendCounts();   // fill totals
+            render();               // plot markers
           }
         },
         error: function(err){
