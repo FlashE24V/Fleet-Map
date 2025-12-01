@@ -165,9 +165,27 @@
       'In Use': true,
       'Unreachable': true
     };
+
+    // Type filters (legend buckets)
+    var typeFilterState = {
+      'Public': true,
+      'Level 2': true,
+      'Level 2 Solar': true,
+      'Level 3': true,
+      'DOT Flo L2': true,
+      'DOT LOT': true
+    };
+
     function passesFilter(statusNorm) {
       if (statusNorm in filterState) return !!filterState[statusNorm];
       return true;
+    }
+
+    function passesTypeFilter(r) {
+      var bucket = classifyRowForLegend(r);
+      if (!bucket) return true; // rows without a bucket still show
+      if (!(bucket in typeFilterState)) return true;
+      return !!typeFilterState[bucket];
     }
 
     function makePopup(name, statusText, lat, lon, countsHtml, descText) {
@@ -215,6 +233,9 @@
         // Final status (network override for Unreachable)
         var statusNorm = deriveStatus(r);
         if (!passesFilter(statusNorm)) return;
+
+        // Filter by legend/type (Public, Level 2, etc.)
+        if (!passesTypeFilter(r)) return;
 
         var cls = classForRow(r);
 
@@ -307,14 +328,31 @@
       var ctrl = L.control({position: 'topright'});
       ctrl.onAdd = function () {
         var div = L.DomUtil.create('div', 'controls');
-        div.innerHTML = '<b>Filter by Status</b>' +
-                        '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
-                        '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
-                        '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
+        div.innerHTML =
+          '<b>Filter by Status</b>' +
+          '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
+          '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
+          '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>' +
+          '<hr style="margin:6px 0;" />' +
+          '<b>Filter by Type</b>' +
+          '<label><input type="checkbox" data-type="Public" checked/> Public</label>' +
+          '<label><input type="checkbox" data-type="Level 2" checked/> Level 2</label>' +
+          '<label><input type="checkbox" data-type="Level 2 Solar" checked/> Level 2 Solar</label>' +
+          '<label><input type="checkbox" data-type="Level 3" checked/> Level 3</label>' +
+          '<label><input type="checkbox" data-type="DOT Flo L2" checked/> DOT Flo L2</label>' +
+          '<label><input type="checkbox" data-type="DOT LOT" checked/> DOT LOT</label>';
+
         div.addEventListener('change', function(e){
           var t = e.target;
-          if (t && t.dataset && t.dataset.k) {
+          if (!t || !t.dataset) return;
+
+          if (t.dataset.k) {
+            // Status filter (Available / In Use / Unreachable)
             filterState[t.dataset.k] = t.checked;
+            render();
+          } else if (t.dataset.type) {
+            // Type filter (Public / Level 2 / etc.)
+            typeFilterState[t.dataset.type] = t.checked;
             render();
           }
         });
