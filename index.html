@@ -10,7 +10,8 @@
   <style>
     html, body { height: 100%; margin: 0; }
     #map { height: 100vh; width: 100%; }
-    .legend {
+
+    .legend, .controls {
       background: white;
       padding: 8px 10px;
       border-radius: 8px;
@@ -32,7 +33,7 @@
     }
     .legend .label { flex: 1; }
     .legend .count { color: #6b7280; } /* greyed-out totals in parentheses */
-    .legend label { display: block; margin: 3px 0; }
+    .controls label { display: block; margin: 3px 0; }
 
     .bolt-circle {
       width: 26px;
@@ -54,7 +55,6 @@
     .bolt-l2 { background: #2563eb; }       /* Level 2 → blue */
     .bolt-solar { background: #facc15; color: #111; }  /* Solar → yellow */
     .bolt-public { background: #f97316; }   /* Public → orange */
-
     .bolt-flo { background: #a855f7; }      /* DOT Flo L2 → purple */
     .bolt-dotlot { background: #6b7280; }   /* DOT LOT & Nissan → grey */
 
@@ -290,19 +290,39 @@
       }
     }
 
-    var legendControl, legendEl;
+    var legendControl, legendEl, statusControl;
 
-    function addLegendWithFilters() {
-      if (legendControl) return; // avoid duplicates
-      legendControl = L.control({position: 'topright'});
+    // Status filter (top-right)
+    function addStatusControl() {
+      if (statusControl) return;
+      statusControl = L.control({position: 'topright'});
+      statusControl.onAdd = function () {
+        var div = L.DomUtil.create('div', 'controls');
+        div.innerHTML =
+          '<b>Filter by Status</b>' +
+          '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
+          '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
+          '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>';
+
+        div.addEventListener('change', function(e){
+          var t = e.target;
+          if (!t || !t.dataset || !t.dataset.k) return;
+          filterState[t.dataset.k] = t.checked;
+          render();
+        });
+
+        return div;
+      };
+      statusControl.addTo(map);
+    }
+
+    // Legend + type filter (top-left)
+    function addLegendTypeControl() {
+      if (legendControl) return;
+      legendControl = L.control({position: 'topleft'});
       legendControl.onAdd = function () {
         legendEl = L.DomUtil.create('div', 'legend');
         legendEl.innerHTML =
-          '<div style="margin-bottom:4px;"><b>Filter by Status</b></div>' +
-          '<label><input type="checkbox" data-k="Available" checked/> Available</label>' +
-          '<label><input type="checkbox" data-k="In Use" checked/> In Use</label>' +
-          '<label><input type="checkbox" data-k="Unreachable" checked/> Unreachable</label>' +
-          '<hr style="margin:6px 0;" />' +
           '<div style="margin-bottom:4px;"><b>Filter by Type</b></div>' +
 
           '<div class="row">' +
@@ -347,20 +367,11 @@
             '<span class="count" id="count-dotlot">(0)</span>' +
           '</div>';
 
-        // Handle checkbox changes (status + type) in one place
         legendEl.addEventListener('change', function(e){
           var t = e.target;
-          if (!t || !t.dataset) return;
-
-          if (t.dataset.k) {
-            // Status filter
-            filterState[t.dataset.k] = t.checked;
-            render();
-          } else if (t.dataset.type) {
-            // Type filter
-            typeFilterState[t.dataset.type] = t.checked;
-            render();
-          }
+          if (!t || !t.dataset || !t.dataset.type) return;
+          typeFilterState[t.dataset.type] = t.checked;
+          render();
         });
 
         return legendEl;
@@ -417,9 +428,10 @@
           }
           pendingLoads--;
           if (pendingLoads === 0) {
-            addLegendWithFilters(); // build legend + filters
-            updateLegendCounts();   // fill totals
-            render();               // plot markers
+            addStatusControl();     // top-right
+            addLegendTypeControl(); // top-left
+            updateLegendCounts();
+            render();
           }
         },
         error: function(err){
