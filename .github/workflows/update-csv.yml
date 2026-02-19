@@ -3,14 +3,14 @@ name: Update CSV (ChargePoint)
 on:
   schedule:
     - cron: "0,20,40 * * * *"   # run at :00, :20, :40 (UTC)
-  workflow_dispatch:             # allow manual run
+  workflow_dispatch:
 
 permissions:
-  contents: write                # allow commits
+  contents: write
 
 concurrency:
   group: update-csv
-  cancel-in-progress: true       # don't let jobs overlap/queue
+  cancel-in-progress: true
 
 jobs:
   update:
@@ -18,6 +18,7 @@ jobs:
     env:
       CP_USERNAME: ${{ secrets.CP_USERNAME }}
       CP_PASSWORD: ${{ secrets.CP_PASSWORD }}
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -32,15 +33,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas
 
-      - name: Run updater (writes CSVs to repo root)
+      - name: Run updater (debug + generate CSV)
         run: |
+          set -e
+          echo "=== Starting updater ==="
           python cp_updater_fleetmap_github_only.py
+
+          echo ""
+          echo "=== Workspace files (after updater) ==="
+          pwd
+          ls -la
+
+          echo ""
+          echo "=== Check output file ==="
+          if [ -f status_latest_slim.csv ]; then
+            echo "status_latest_slim.csv EXISTS ✅"
+            echo "--- first 3 lines ---"
+            head -n 3 status_latest_slim.csv
+          else
+            echo "status_latest_slim.csv NOT FOUND ❌"
+            echo "Updater did not produce the CSV. Check the logs above for 'ERROR: No station metadata retrieved' or SOAP/auth issues."
+            exit 1
+          fi
 
       - name: Commit & push if changed
         run: |
           git config user.name "NYC Fleet Bot"
           git config user.email "fleet-automation@dcas.nyc.gov"
-          git add status_latest_slim.csv stations_per_station_slim.csv || true
+
+          # Stage ONLY the live CSV (no stations_per_station dependency)
+          git add status_latest_slim.csv || true
+
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
