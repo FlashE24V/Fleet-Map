@@ -290,7 +290,7 @@ def main():
     if stations_df is None or stations_df.empty:
         log("ERROR: No station metadata retrieved. Aborting."); return
 
-    atomic_write_csv(stations_df, STATIONS_CACHE)
+    
     ids=stations_df["stationID"].dropna().unique().tolist()
 
     status_df=fetch_all_statuses(ids)
